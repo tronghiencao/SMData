@@ -1,17 +1,15 @@
-var EXP_HISTORY_CNT = 261;
 /**
  * @param  {object} ckIDs a set of stocks id
  * @param  {string} fromDate YYYYMMDD
  */
  function exportPriceHistory(ckIDs,fromDate) {
    console.log('exportPriceHistory: ' + fromDate);
-   var keyArray = new Array();
    var outerArray = new Array();
    var row = 0;
    for (; row < ckIDs.length&&ckIDs[row]!=""; row++) {
-     keyArray = _exportHistoricaldata(ckIDs[row],fromDate,EXP_HISTORY_CNT);
+     var data = _exportHistoricaldata(ckIDs[row],fromDate,EXP_HISTORY_CNT);
      for (var i in keyArray) {
-       outerArray.push(keyArray[i]);
+       outerArray.push(data[i]);
      }
    }
    return outerArray;
@@ -22,25 +20,14 @@ var EXP_HISTORY_CNT = 261;
  */
  function exportLastestPrice(ckIDs) { 
    console.log('exportLastestPrice');
-   var data = _exportLastestDlyData("Historicaldata",ckIDs,EXP_HISTORY_CNT);
    var outerArray = [];
-   var ckKNs = [];
-   var lastClose = 0;
-   for (var i in data) {
-     //console.log('data[i]: ' + data[i]);
-     ckKNs = [];
-     ckKNs[0] = [[data[i].key.substring(0,3)]];
-     ckKNs[1] = [[data[i].date]];
-     ckKNs[2] = [[data[i].adjclose-lastClose]];
-     ckKNs[3] = [[data[i].open]];
-     ckKNs[4] = [[data[i].high]];
-     ckKNs[5] = [[data[i].low]];
-     ckKNs[6] = [[data[i].close]];
-     ckKNs[7] = [[Number((data[i].high+data[i].low+data[i].close)/3).toFixed(0)]];
-     ckKNs[8] = [[data[i].adjclose]];
-     ckKNs[9] = [[data[i].volume]];
-     lastClose = data[i].close;
-     outerArray.push(ckKNs);
+   var row = 0;
+   for (; row < ckIDs.length&&ckIDs[row]!=""; row++) {
+     var data = _exportLastestHistoricaldata(ckIDs[row],EXP_HISTORY_CNT);
+     var lastClose = 0;
+     for (var i in data) {
+       outerArray.push(data[i]);
+     }
    }
    return outerArray;
  };
@@ -53,17 +40,16 @@ var EXP_HISTORY_CNT = 261;
    console.log('exportAvgVolume');
    //var data = _exportLastestDlyData("Historicaldata",ckIDs,days);
    var year = _getCurrentYear();
-   var keyArray = new Array();
    var outerArray = new Array();
    var row = 0;
    
    for (; row < ckIDs.length&&ckIDs[row]!=""; row++) {
      var avgSum = 0;
      var cnt = 0;
-     keyArray = _exportHistoricaldata(ckIDs[row],year+"1231",days);
-     for (var i in keyArray) {
+     var data = _exportLastestHistoricaldata(ckIDs[row],days);
+     for (var i in data) {
        cnt += 1;
-       avgSum += Number(keyArray[i][9]);
+       avgSum += Number(data[i][9]);
      }
      var avgArray = new Array();
      avgArray[0] = [[(avgSum/cnt).toFixed(0)]];
@@ -692,6 +678,40 @@ function _exportIncomeBykey(key,cnt,type) {
    var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
    
    var queryParameters = {orderBy:"$key",startAt:key+"",endAt:key+fromDate,limitToLast:limit};
+   var data = base.getData("", queryParameters);
+   var row = 0;
+   var lastClose = 0;
+   var ckKNs = new Array();
+   var outerArray = new Array();
+   for(var i in data) {
+     ckKNs = new Array();
+     ckKNs[0] = [[key]];
+     ckKNs[1] = [[data[i].date]];
+     ckKNs[2] = [[data[i].adjclose-lastClose]];
+     ckKNs[3] = [[data[i].open]];
+     ckKNs[4] = [[data[i].high]];
+     ckKNs[5] = [[data[i].low]];
+     ckKNs[6] = [[data[i].close]];
+     ckKNs[7] = [[Number((data[i].high+data[i].low+data[i].close)/3).toFixed(0)]];
+     ckKNs[8] = [[data[i].adjclose]];
+     ckKNs[9] = [[data[i].volume]];
+     lastClose = data[i].close;
+     row += 1;
+     outerArray.push(ckKNs);
+   }
+   return outerArray;
+};
+
+/**
+ * @param  {string} stock key
+ * @param  {string} fromDate YYYYMMDD
+ */
+ function _exportLastestHistoricaldata(key,limit) {
+   var firebaseUrl = _getFirebaseUrl("Historicaldata");
+   var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+   var year = _getCurrentYear();
+   
+   var queryParameters = {orderBy:"$key",startAt:key+"",endAt:key+year+"1231",limitToLast:limit};
    var data = base.getData("", queryParameters);
    var row = 0;
    var lastClose = 0;
