@@ -1,0 +1,959 @@
+var EXP_HISTORY_CNT = 261;
+/**
+ * @param  {object} ckIDs a set of stocks id
+ * @param  {string} fromDate YYYYMMDD
+ */
+ function exportPriceHistory(ckIDs,fromDate) {
+   console.log('exportPriceHistory: ' + fromDate);
+   var keyArray = new Array();
+   var outerArray = new Array();
+   var row = 0;
+   for (; row < ckIDs.length&&ckIDs[row]!=""; row++) {
+     keyArray = _exportHistoricaldata(ckIDs[row],fromDate,EXP_HISTORY_CNT);
+     for (var i in keyArray) {
+       outerArray.push(keyArray[i]);
+     }
+   }
+   return outerArray;
+ };
+ 
+ /**
+ * @param  {object} ckIDs a set of stocks id
+ */
+ function exportLastestPrice(ckIDs) { 
+   console.log('exportLastestPrice');
+   var data = _exportLastestDlyData("Historicaldata",ckIDs,EXP_HISTORY_CNT);
+   var outerArray = [];
+   var ckKNs = [];
+   var lastClose = 0;
+   for (var i in data) {
+     //console.log('data[i]: ' + data[i]);
+     ckKNs = [];
+     ckKNs[0] = [[data[i].key.substring(0,3)]];
+     ckKNs[1] = [[data[i].date]];
+     ckKNs[2] = [[data[i].adjclose-lastClose]];
+     ckKNs[3] = [[data[i].open]];
+     ckKNs[4] = [[data[i].high]];
+     ckKNs[5] = [[data[i].low]];
+     ckKNs[6] = [[data[i].close]];
+     ckKNs[7] = [[Number((data[i].high+data[i].low+data[i].close)/3).toFixed(0)]];
+     ckKNs[8] = [[data[i].adjclose]];
+     ckKNs[9] = [[data[i].volume]];
+     lastClose = data[i].close;
+     outerArray.push(ckKNs);
+   }
+   return outerArray;
+ };
+ 
+ /**
+ * @param  {object} ckIDs a set of stocks id
+ * @param  {number} days
+ */
+ function exportAvgVolume(ckIDs,days) {
+   console.log('exportAvgVolume');
+   //var data = _exportLastestDlyData("Historicaldata",ckIDs,days);
+   var year = _getCurrentYear();
+   var keyArray = new Array();
+   var outerArray = new Array();
+   var row = 0;
+   
+   for (; row < ckIDs.length&&ckIDs[row]!=""; row++) {
+     var avgSum = 0;
+     var cnt = 0;
+     keyArray = _exportHistoricaldata(ckIDs[row],year+"1231",days);
+     for (var i in keyArray) {
+       cnt += 1;
+       avgSum += Number(keyArray[i][9]);
+     }
+     var avgArray = new Array();
+     avgArray[0] = [[(avgSum/cnt).toFixed(0)]];
+     outerArray.push(avgArray);
+   }
+   return outerArray;
+ };
+
+function exportBrokingByYear(ckIDs,year) {
+  console.log('exportBrokingByYear: '+ year);
+  var firebaseUrl = _getFirebaseUrl("BrokingInfo");
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+  var queryParameters = {orderBy:"buydate", startAt: year+"/01/01", endAt: year+"/12/31"};
+  var data = base.getData("", queryParameters);
+  var outerArray = new Array();
+  var ebrokingArray = new Array();
+  
+  for(var i in data) {
+    var key = i.substring(0,3); //Key
+    if (_isInArrays(key,ckIDs) === true) {
+      ebrokingArray = new Array();
+      ebrokingArray[0] = key;
+      ebrokingArray[1] = data[i].buydate;
+      ebrokingArray[2] = data[i].buyprice;
+      ebrokingArray[3] = data[i].buyrates;
+      ebrokingArray[4] = data[i].selldate;
+      ebrokingArray[5] = data[i].sellprice;
+      ebrokingArray[6] = data[i].sellrates;
+      ebrokingArray[7] = data[i].change;
+      ebrokingArray[8] = _exportEvents(key,data[i].buydate,data[i].selldate);
+      outerArray.push(ebrokingArray);
+    }
+  }
+  return outerArray;
+}
+
+function exportTodayBrokingInfo(today) {
+  console.log('exportTodayBrokingInfo: '+ today);
+  var outerArray = new Array();
+  var ebrokerArray = new Array();
+  var buyingBrokers = new Array();
+  var todayBrokers = new Array();
+  buyingBrokers = _exportBuyingBroking();
+  todayBrokers = _exportTodayBroker(today);
+  for (var i = 0; i < todayBrokers.length; i++) {
+    var key = todayBrokers[i][0];
+    var broker = todayBrokers[i][2];
+    var pos = _inBuyingArrays(key,buyingBrokers);
+    if (pos >= 0) {
+      ebrokerArray = new Array();
+      ebrokerArray[0] = buyingBrokers[pos][0];
+      ebrokerArray[1] = buyingBrokers[pos][1];
+      ebrokerArray[2] = buyingBrokers[pos][2];
+      ebrokerArray[3] = buyingBrokers[pos][3];
+      ebrokerArray[4] = "";
+      ebrokerArray[5] = todayBrokers[i][3];
+      ebrokerArray[6] = todayBrokers[i][4];
+      ebrokerArray[7] = ((ebrokerArray[5]-ebrokerArray[2])/ebrokerArray[2]).toFixed(2);
+      if (broker == "Bán") {
+        // New Bán
+        ebrokerArray[4] = todayBrokers[i][1];
+        console.log('SoldArray: ' + ebrokerArray);
+      }
+      outerArray.push(ebrokerArray);
+    } else if(broker == "Mua") {
+      // New Mua
+      ebrokerArray = new Array();
+      ebrokerArray[0] = key;
+      ebrokerArray[1] = todayBrokers[i][1];
+      ebrokerArray[2] = todayBrokers[i][3];
+      ebrokerArray[3] = todayBrokers[i][4];
+      ebrokerArray[4] = "";
+      ebrokerArray[5] = todayBrokers[i][3];
+      ebrokerArray[6] = todayBrokers[i][4];
+      ebrokerArray[7] = "0";
+      console.log('BuyArray: ' + ebrokerArray);
+      outerArray.push(ebrokerArray);
+    }
+  }
+  return outerArray;
+}
+
+/**
+ * Export all eboker data by year
+ * @param  {integer} year
+ */
+function _exportTodayBroker(today) {
+  var firebaseUrl = _getFirebaseUrl("Ebroker");
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+  var queryParameters = {orderBy:"date", equalTo: today};
+  var data = base.getData("", queryParameters);
+  var lastKey = "";
+  var outerArray = new Array();
+  var ebrokerArray = new Array();
+  
+  for(var i in data) {
+    ebrokerArray = new Array();
+    ebrokerArray[0] = i.substring(0,3); //Key
+    ebrokerArray[1] = data[i].date;
+    ebrokerArray[2] = data[i].ebroker;
+    ebrokerArray[3] = data[i].price;
+    ebrokerArray[4] = _getEbrokerPoint(data[i]);
+    outerArray.push(ebrokerArray);
+  }
+  return outerArray;
+}
+
+function _exportTopEbroker(ckIDs) {
+  console.log('_exportTopEbroker');
+  var outerArray = new Array();
+  var eBrokerArray = new Array();
+  var topWeekArray = new Array();
+  var topMonthArray = new Array();
+  var row = 0;
+  var todayChg = 0;
+  var weekChg = 0;
+  var monthChg = 0;
+  for (n in ckIDs) {
+    if (ckIDs[n] !== "") {
+      var topWeek = new Array();
+      var key = ckIDs[n];
+      eBrokerArray = _exportLatestEbroker(key);
+      if(eBrokerArray.length == 0) continue;
+      weekChg = (eBrokerArray[8]/(eBrokerArray[6]-eBrokerArray[8])).toFixed(3);
+      monthChg = (eBrokerArray[9]/(eBrokerArray[6]-eBrokerArray[9])).toFixed(3);
+      topWeek[0] = key; //Key
+      topWeek[1] = eBrokerArray[6]; //price
+      topWeek[2] = weekChg;
+      topWeek[3] = eBrokerArray[10];
+      topWeekArray.push(topWeek);
+      var topMonth = new Array();
+      topMonth[0] = key; //Key
+      topMonth[1] = eBrokerArray[6]; //price
+      topMonth[2] = monthChg;
+      topMonth[3] = eBrokerArray[10];
+      topMonthArray.push(topMonth);
+    }
+  }
+  topWeekArray.sort(function(x,y){
+    var xp = x[2];
+    var yp = y[2];
+    return xp == yp ? 0 : xp > yp ? -1 : 1;
+  });
+  for (var i=0; i<5; i++) {
+    outerArray.push(topWeekArray[i]);
+  }
+   topMonthArray.sort(function(x,y){
+     var xp = x[2];
+     var yp = y[2];
+     return xp == yp ? 0 : xp > yp ? -1 : 1;
+  });
+  for (var i=0; i<5; i++) {
+    outerArray.push(topMonthArray[i]);
+  }
+  return outerArray;
+}
+
+function _exportBuyingBroking() {
+  var firebaseUrl = _getFirebaseUrl("BrokingInfo");
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+  var queryParameters = {orderBy:"selldate", endAt: "%20"};
+  var data = base.getData("", queryParameters);
+  var outerArray = new Array();
+  var ebrokingArray = new Array();
+  
+  for(var i in data) {
+    ebrokingArray = new Array();
+    ebrokingArray[0] = i.substring(0,3); //Key
+    ebrokingArray[1] = data[i].buydate;
+    ebrokingArray[2] = data[i].buyprice;
+    ebrokingArray[3] = data[i].buyrates;
+    outerArray.push(ebrokingArray);
+  }
+  return outerArray;
+}
+
+/**
+ * Export EPS 3Year for stocks list
+ * @param  {object} ckIDs a set of stocks id
+ */
+function exportEPSYearly(ckIDs,firstYear) {
+  console.log('exportEPSYearly: '+ firstYear);
+  var bSheetArray = new Array();
+  var incomeArray = new Array();
+  var EPSYearlyArray = new Array();
+  var EPSYearly = new Array();
+  var years = 0;
+  //data for 4Q
+  var limitNum = 4;
+  for (n in ckIDs) {
+    if (ckIDs[n] !== "") {
+      //Reset to current year
+      years = firstYear;
+      var key = ckIDs[n];
+      EPSYearly = new Array();
+      //Loop for 3 year
+      for (var i=0; i<3; i++) {
+        bSheetArray = _exportBSheetBykey(key+years+"Q4",limitNum,0);
+        incomeArray = _exportIncomeBykey(key+years+"Q4",limitNum,0);
+        var tempArr = _getStatisticsArray(bSheetArray,incomeArray);
+        for (j=0; j<tempArr.length; j++){
+          EPSYearly.push([tempArr[j]]);
+        }
+        //Prev year
+        years = years - 1;
+      }
+      console.log('exportEPSYearly('+key+years+') = '+EPSYearly);
+      EPSYearlyArray.push(EPSYearly);
+    }
+  }
+  return EPSYearlyArray;
+};
+
+/**
+ * Export IncRev of this year for stocks list
+ * @param  {object} ckIDs a set of stocks id
+ */
+function exportIncRevEPSYearly(ckIDs, year){
+  var incRevArray = new Array();
+  var incomeArray = new Array();
+  var bSheetArray = new Array();
+  
+  for (n in ckIDs) {
+    var limitNum = 4;
+    var EPS4Q = 0;
+    var StickCnt = 0;
+    if (ckIDs[n] !== "") {
+      var key = ckIDs[n]+year+"Q4";
+      incomeArray = _exportIncomeBykey(key,limitNum,0);
+      bSheetArray = _exportBSheetBykey(key,limitNum,0);
+      var epsCalcBln = true;
+      if(bSheetArray.length !== incomeArray.length || incomeArray.length == 0) {
+        epsCalcBln = false;
+      }
+      var IncRev = new Array();
+      //Data trouble return "#N/A"
+      IncRev[0] = "#N/A";
+      IncRev[1] = "#N/A";
+      IncRev[2] = "#N/A";
+      if (epsCalcBln) {
+        var Inc = 0;
+        var Rev = 0;
+        for (var i = 0; i < incomeArray.length; i++) {
+          StickCnt = Number(bSheetArray[i][3])/10000;
+          var stage = String(incomeArray[i][6]);
+          if(stage.length == 4) {
+            //Yearly record, set return and break
+            Inc = Number(incomeArray[i][3]);
+            Rev = Number(incomeArray[i][5]);
+            break;
+          }
+          Inc += Number(incomeArray[i][3]);
+          Rev += Number(incomeArray[i][5]);
+        }
+        EPS4Q = (Inc/StickCnt).toFixed(0);
+        IncRev[0] = Inc;
+        IncRev[1] = Rev;
+        IncRev[2] = EPS4Q;
+      }
+      incRevArray.push(IncRev);
+      console.log('IncRevEPSYearly(%s): %s', key, IncRev);
+    }
+  }
+  return incRevArray;
+};
+
+/**
+ * Export IncRev of this year for stocks list
+ * @param  {object} ckIDs a set of stocks id
+ */
+function exportIncRevEPSQuarterly(ckIDs, yearQter){
+  var incRevArray = new Array();
+  var incomeArray = new Array();
+  var bSheetArray = new Array();
+  
+  for (n in ckIDs) {
+    var epsCalcBln;
+    if (ckIDs[n] !== "") {
+      var key = ckIDs[n]+yearQter;
+      //1.Quaterly calc
+      incomeArray = _exportIncomeBykey(key,1,2);
+      bSheetArray = _exportBSheetBykey(key,1,2);
+      var IncRev = new Array();
+      IncRev[0] = "#N/A";
+      IncRev[1] = "#N/A";
+      IncRev[2] = "#N/A";
+      epsCalcBln = true;
+      if(incomeArray.length == 0 || bSheetArray.length == 0) {
+        epsCalcBln = false;
+      }
+      if (epsCalcBln) {
+        var Inc = Number(incomeArray[0][3]);
+        var Rev = Number(incomeArray[0][5]);
+        var StickCnt = Number(bSheetArray[0][3])/10000;
+        var EPS4Q = (Inc/StickCnt).toFixed(0);
+        IncRev[0] = Inc;
+        IncRev[1] = Rev;
+        IncRev[2] = EPS4Q;
+        //console.log('StickCnt(%s): %s', key, StickCnt);
+      }
+      //2.Yearly calc
+      incomeArray = _exportIncomeBykey(key,4,0);
+      IncRev[3] = "#N/A";
+      epsCalcBln = true;
+      if(incomeArray.length == 0) {
+        epsCalcBln = false;
+      }
+      if (epsCalcBln) {
+        var Inc = 0;
+        for (var i = 0; i < incomeArray.length; i++) {
+          var Stage = String(incomeArray[i][6]);
+          //console.log('Stage: '+Stage+', Stage.length: '+Stage.length);
+          //Exclude yearly record
+          if(Stage.length == 6) Inc += Number(incomeArray[i][3]);
+        }
+        IncRev[3] = Inc;
+      }
+      
+      incRevArray.push(IncRev);
+      console.log('IncRevEPSQuarterly(%s): %s', key, IncRev);
+    }
+  }
+  return incRevArray;
+};
+
+/**
+ * Export IncRev of this year for stocks list
+ * @param  {object} ckIDs a set of stocks id
+ */
+function exportStockScreener(ckIDs){
+  var priceArray = new Array();
+  var incomeArray = new Array();
+  var bSheetArray = new Array();
+  var eBrokerArray = new Array();
+  var year = _getCurrentYear();
+  var keyArray = new Array();
+  var outerArray = new Array();
+  
+  for (n in ckIDs) {
+    var assets = 0;
+    var liabilities = 0;
+    var undisEarning = 0;
+    var StickCnt = 0;
+    var bookValue = 0;
+    var Inc = 0;
+    var Equity = 0;
+    var liabilitiesRate = 0;
+    var Chg = 0;
+    if (ckIDs[n] !== "") {
+      keyArray = new Array();
+      var key = ckIDs[n];
+      priceArray = _exportLatestPrice(key);
+      eBrokerArray = _exportLatestEbroker(key);
+      incomeArray = _exportIncomeBykey(key+year+"Q4",4,1);
+      bSheetArray = _exportBSheetBykey(key+year+"Q4",1,1);
+      //Calc
+      for (var i = 0; i < incomeArray.length; i++) {
+        var Stage = String(incomeArray[i][6]);
+        //Exclude yearly record
+        if(Stage.length == 6) Inc += Number(incomeArray[i][3]);
+      }
+      StickCnt = bSheetArray[0][3]/10000;
+      assets = bSheetArray[0][0];
+      liabilities = bSheetArray[0][2];
+      undisEarning = (bSheetArray[0][7]/StickCnt).toFixed(0);
+      Equity = Number(bSheetArray[0][4]);
+      liabilitiesRate = (liabilities/bSheetArray[0][6]).toFixed(2);
+      bookValue = ((assets-liabilities)/StickCnt).toFixed(0);
+      Chg = (eBrokerArray[7]/(priceArray[5]-eBrokerArray[7])).toFixed(3);
+      //Add
+      if(priceArray.length == 0) {
+        keyArray.push("");
+        keyArray.push("");
+        keyArray.push("");
+        keyArray.push("");
+        keyArray.push("");
+      } else {
+        keyArray.push(priceArray[5]);
+        if(eBrokerArray.length == 0) {
+          keyArray.push("");
+          keyArray.push("");
+        } else {
+          keyArray.push(Chg);
+          keyArray.push(eBrokerArray[5]);
+        }
+        keyArray.push(priceArray[6]);
+        keyArray.push(priceArray[5]*StickCnt);
+      }
+      keyArray.push(bookValue);
+      //Undistributed earnings per share
+      keyArray.push(undisEarning);
+      //Liabilities Rate
+      keyArray.push(liabilitiesRate);
+      //EPS
+      keyArray.push((Inc/StickCnt).toFixed(0));
+      //ROE
+      keyArray.push((Inc/Equity).toFixed(2));
+      console.log('StockScreener(' + key +'): ' + keyArray);
+      outerArray.push(keyArray);
+    }
+  }
+  return outerArray;
+};
+
+/**
+ * Export BookValue of this year for stocks list
+ * @param  {object} ckIDs a set of stocks id
+ */
+function exportLatestSMPricing(ckIDs){
+  console.log('exportLatestSMPricing');
+  var bSheetArray = new Array();
+  var incomeArray = new Array();
+  var outerArray = new Array();
+  var keyArray = new Array();
+  var year = _getCurrentYear();
+  for (n in ckIDs) {
+    var Inc = 0;
+    if (ckIDs[n] !== "") {
+      keyArray = new Array();
+      var key = ckIDs[n]+year+"Q4";
+      bSheetArray = _exportBSheetBykey(key,1,1);
+      incomeArray = _exportIncomeBykey(key,4,1);
+      //Calc Inc
+      for (var i = 0; i < incomeArray.length; i++) {
+        var Stage = String(incomeArray[i][6]);
+        //Exclude yearly record
+        if(Stage.length == 6) Inc += Number(incomeArray[i][3]);
+      }
+      if (bSheetArray.length == 0) break;
+      var StickCnt = bSheetArray[0][3]/10000;
+      var assets = bSheetArray[0][0];
+      var liabilities = bSheetArray[0][2];
+      var netequity = bSheetArray[0][3];
+      var undisEarnings = bSheetArray[0][7];
+      var bookValue = (assets-liabilities)/StickCnt;
+      var Equity = Number(bSheetArray[0][4]);
+      var liabilitiesRate = (liabilities/bSheetArray[0][6]).toFixed(2);
+      keyArray.push(bookValue);
+      //Undistributed earnings per share
+      keyArray.push(undisEarnings/StickCnt);
+      //Liabilities Rate
+      keyArray.push(liabilitiesRate);
+      //EPS
+      keyArray.push((Inc/StickCnt).toFixed(0));
+      //ROE
+      keyArray.push((Inc/Equity).toFixed(2));
+      outerArray.push(keyArray);
+    }
+  }
+  return outerArray;
+};
+
+/**
+ * @param  {object} ckIDs a set of stocks id
+ * @param  {string} fromDate YYYYMMDD
+ */
+ function exportLatestMaAndEbroker(ckIDs) {
+   console.log('exportLatestMaAndEbroker');
+   var keyArray = new Array();
+   var outerArray = new Array();
+   var row = 0;
+   for (; row < ckIDs.length&&ckIDs[row]!=""; row++) {
+     keyArray = _exportLatestEbroker(ckIDs[row]);
+     var brokerItems = new Array();
+     brokerItems.push(keyArray[0]);
+     brokerItems.push(keyArray[1]);
+     brokerItems.push(keyArray[2]);
+     brokerItems.push(keyArray[3]);
+     brokerItems.push(keyArray[4]);
+     brokerItems.push(keyArray[5]);
+     outerArray.push(brokerItems);
+   }
+   return outerArray;
+ };
+ 
+ /**
+ * @param  {object} ckIDs a set of stocks id
+ * @param  {string} fromDate YYYYMMDD
+ */
+ function exportLatestEbroker(ckIDs) {
+   console.log('exportLatestEbroker');
+   var keyArray = new Array();
+   var ebrokerArray = new Array();
+   var row = 0;
+   for (; row < ckIDs.length&&ckIDs[row]!=""; row++) {
+     keyArray = _exportLatestEbroker(ckIDs[row]);
+     var brokerItems = new Array();
+     if (keyArray.length > 0) {
+       brokerItems.push(keyArray[5]+"("+_numberFormatter(keyArray[6])+")");
+     } else {
+       brokerItems.push("");
+     }
+     ebrokerArray.push(brokerItems);
+   }
+   return ebrokerArray;
+ };
+
+function _getStatisticsArray(bSheetArray,incomeArray) {
+  //Init data for 3y and 4Q value = 0
+  var EPSYearly = new Array();
+  var yearlyCnt = 12;
+  //Init data for 1year
+  var cnt=0;
+  for (cnt=0; cnt<yearlyCnt; cnt++) {
+    EPSYearly[cnt] = [[0]];
+  }
+  cnt = bSheetArray.length;
+  if(cnt !== incomeArray.length) cnt = 0;
+  if(cnt > 0) {
+    var Equity = 0;
+    var Rev = 0;
+    var Cost = 0;
+    var Inc = 0;
+    var EPS = 0;
+    var EPSGrowth = 0;
+    var Rate = 0;
+    var pos = 4+(4-cnt)*2;
+    cnt = cnt - 1;
+    Equity = Number(bSheetArray[cnt][4]);
+    Rate = bSheetArray[cnt][2]/bSheetArray[cnt][6];
+    for (; cnt >= 0; cnt--) {
+      Rev = Rev + Number(incomeArray[cnt][5]);
+      Cost = Cost + Number(incomeArray[cnt][0]);
+      Inc = Inc + Number(incomeArray[cnt][3]);
+      EPS = incomeArray[cnt][3]/(bSheetArray[cnt][3]/10000);
+      EPSYearly[pos] = [[EPS.toFixed(0)]];
+      //EPS Growth
+      EPSYearly[pos+1] = [[0]];
+      pos = pos + 2;
+    }
+    EPSYearly[0] = [[Inc]];
+    EPSYearly[1] = [[(Inc/Equity).toFixed(2)]];
+    EPSYearly[2] = [[(Inc/Cost).toFixed(2)]];
+    EPSYearly[3] = [[Rate.toFixed(2)]];
+  }
+  return EPSYearly;
+};
+
+/* key: stockid + year + quater (AAA2017Q2)
+   cnt: limitToLast 1 for 1quater or 1year
+   searchType: 0->yearly, 1->quaterly, 2->equalTo
+*/
+function _exportBSheetBykey(key,cnt,type) {
+  var firebaseUrl = _getFirebaseUrl("BalanceSheet");
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+  var queryParameters;
+  var startAt;
+  
+  //substring to keyid, remove year
+  if (type == 0) {
+    startAt = key.substring(0,7);
+    queryParameters = {orderBy:"$key",startAt:startAt,endAt:key,limitToLast:cnt};
+  } else if(type == 1) {
+    startAt = key.substring(0,3);
+    queryParameters = {orderBy:"$key",startAt:startAt,endAt:key,limitToLast:cnt};
+  } else {
+    queryParameters = {orderBy:"$key",equalTo:key};
+  }
+  var data = base.getData("", queryParameters);
+  var ckKNs = new Array();
+  var outerArray = new Array();
+  for (n in data) {
+    //console.log('data[n].assets:'+data[n].assets);
+    if (data[n] !== "") {
+      ckKNs = new Array();
+      ckKNs[0] = [[data[n].assets]];
+      ckKNs[1] = [[data[n].cash]];
+      ckKNs[2] = [[data[n].liabilities]];
+      ckKNs[3] = [[data[n].netequity]];
+      ckKNs[4] = [[data[n].shareholdersequity]];
+      ckKNs[5] = [[data[n].stage]];
+      ckKNs[6] = [[data[n].total]];
+      ckKNs[7] = [[data[n].undistearnings]];
+      ckKNs[8] = [[data[n].sharepremium]];
+      outerArray.push(ckKNs);
+    }
+  }
+  return outerArray;
+};
+
+/* key: stockid + year + quater (AAA2017Q2)
+   cnt: limitToLast 1 for 1quater or 1year
+   searchType: 0->yearly, 1->quaterly, 2->equalTo
+*/
+function _exportIncomeBykey(key,cnt,type) {
+  var firebaseUrl = _getFirebaseUrl("IncomeData");
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+  var queryParameters;
+  var startAt;
+  
+  //substring to keyid, remove year
+  if (type == 0) {
+    startAt = key.substring(0,7);
+    queryParameters = {orderBy:"$key",startAt:startAt,endAt:key,limitToLast:cnt};
+  } else if(type == 1) {
+    startAt = key.substring(0,3);
+    queryParameters = {orderBy:"$key",startAt:startAt,endAt:key,limitToLast:cnt};
+  } else {
+    queryParameters = {orderBy:"$key",equalTo:key};
+  }
+  var data = base.getData("", queryParameters);
+  var ckKNs = new Array();
+  var outerArray = new Array();
+  for (n in data) {
+    if (data[n] !== "") {
+      ckKNs = new Array();
+      ckKNs[0] = [[data[n].cost]];
+      ckKNs[1] = [[data[n].grossfrofit]];
+      ckKNs[2] = [[data[n].incometax]];
+      ckKNs[3] = [[data[n].netincome]];
+      ckKNs[4] = [[data[n].pretaxincome]];
+      ckKNs[5] = [[data[n].sales]];
+      ckKNs[6] = [[data[n].stage]];
+      outerArray.push(ckKNs);
+    }
+  }
+  return outerArray;
+};
+
+/**
+ * @param  {string} stock key
+ * @param  {string} fromDate YYYYMMDD
+ */
+ function _exportHistoricaldata(key,fromDate,limit) {
+   var firebaseUrl = _getFirebaseUrl("Historicaldata");
+   var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+   
+   var queryParameters = {orderBy:"$key",startAt:key+"",endAt:key+fromDate,limitToLast:limit};
+   var data = base.getData("", queryParameters);
+   var row = 0;
+   var lastClose = 0;
+   var ckKNs = new Array();
+   var outerArray = new Array();
+   for(var i in data) {
+     ckKNs = new Array();
+     ckKNs[0] = [[key]];
+     ckKNs[1] = [[data[i].date]];
+     ckKNs[2] = [[data[i].adjclose-lastClose]];
+     ckKNs[3] = [[data[i].open]];
+     ckKNs[4] = [[data[i].high]];
+     ckKNs[5] = [[data[i].low]];
+     ckKNs[6] = [[data[i].close]];
+     ckKNs[7] = [[Number((data[i].high+data[i].low+data[i].close)/3).toFixed(0)]];
+     ckKNs[8] = [[data[i].adjclose]];
+     ckKNs[9] = [[data[i].volume]];
+     lastClose = data[i].close;
+     row += 1;
+     outerArray.push(ckKNs);
+   }
+   return outerArray;
+};
+
+/**
+ * @param  {string} stock key
+ * @param  {string} fromDate YYYYMMDD
+ */
+ function _exportLatestEbroker(key) {
+   var year = _getCurrentYear();
+   var firebaseUrl = _getFirebaseUrl("Ebroker");
+   var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+   var outerArray = new Array();
+   
+   var queryParameters = {orderBy:"$key",startAt:key+"",endAt:key+year+"1231",limitToLast:1};
+   var data = base.getData("", queryParameters);
+   for(var i in data) {
+     outerArray[0] = data[i].weeks52low;
+     outerArray[1] = data[i].weeks52high;
+     outerArray[2] = data[i].ma20;
+     outerArray[3] = data[i].ma50;
+     outerArray[4] = data[i].ma100;
+     if(data[i].ebroker == "Giữ") {
+       outerArray[5] = "";
+     } else {
+       outerArray[5] = data[i].ebroker;
+     }
+     outerArray[6] = data[i].price;
+     outerArray[7] = data[i].todaychg;
+     outerArray[8] = data[i].weekchg;
+     outerArray[9] = data[i].monthchg;
+     outerArray[10] = _getEbrokerPoint(data[i]);
+   }
+   return outerArray;
+};
+
+/**
+ * @param  {string} stock key
+ * @param  {string} fromDate YYYYMMDD
+ */
+ function _exportLatestPrice(key) {
+   var year = _getCurrentYear();
+   var firebaseUrl = _getFirebaseUrl("Historicaldata");
+   var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+   var priceArray = new Array();
+   
+   var queryParameters = {orderBy:"$key",startAt:key+"",endAt:key+year+"1231",limitToLast:1};
+   var data = base.getData("", queryParameters);
+   for(var i in data) {
+     priceArray = new Array();
+     priceArray[0] = data[i].date;
+     priceArray[1] = data[i].open;
+     priceArray[2] = data[i].high;
+     priceArray[3] = data[i].low;
+     priceArray[4] = data[i].close;
+     priceArray[5] = data[i].adjclose;
+     priceArray[6] = data[i].volume;
+     
+     //latestPrice = data[i].adjclose;
+   }
+   return priceArray;
+};
+
+/*
+**
+*/
+function _exportLastestQlyData(path,keyArray,limit) {
+  var firebaseUrl = _getFirebaseUrl("");
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+  //Get current year
+  var year = _getCurrentYear();
+  var parameters = [];
+  
+  for (var i = 0; i < keyArray.length; i++) {
+    var key = keyArray[i];
+    var queryParameters = {orderBy:"$key",startAt:key+"",endAt:key+year+"Q4",limitToLast:limit};
+    var parameter = {path:path,optQueryParameters:queryParameters};
+    parameters.push(parameter);
+  }
+  
+  var data = base.getAllData(parameters);
+  
+  var outerArray = [];
+  for (n in data) {
+    var dataN = data[n];
+    //console.log('data['+n+']:'+JSON.stringify(dataN));
+    if (dataN !== "") {
+      for (key in dataN) {
+        if (dataN[key] !== "") {
+          // Add key
+          dataN[key].key = key;
+          outerArray.push(dataN[key]);
+        }
+      }
+    }
+  }
+  return outerArray;
+};
+
+/*
+**
+*/
+function _exportLastestQlyData(path,keyArray,limit) {
+  var firebaseUrl = _getFirebaseUrl("");
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+  //Get current year
+  var year = _getCurrentYear();
+  var parameters = [];
+  
+  for (var i = 0; i < keyArray.length; i++) {
+    var key = keyArray[i];
+    var queryParameters = {orderBy:"$key",startAt:key+"",endAt:key+year+"Q4",limitToLast:limit};
+    var parameter = {path:path,optQueryParameters:queryParameters};
+    parameters.push(parameter);
+  }
+  
+  var data = base.getAllData(parameters);
+  
+  var outerArray = [];
+  for (n in data) {
+    var dataN = data[n];
+    //console.log('data['+n+']:'+JSON.stringify(dataN));
+    if (dataN !== "") {
+      for (key in dataN) {
+        if (dataN[key] !== "") {
+          // Add key
+          dataN[key].key = key;
+          outerArray.push(dataN[key]);
+        }
+      }
+    }
+  }
+  return outerArray;
+};
+
+/*
+**
+*/
+function _exportEvents(key,startDate,endDate) {
+  console.log('_exportEvents');
+  var firebaseUrl = _getFirebaseUrl("Events");
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
+  
+  startDate = startDate.replace(/\//g,"");
+  endDate = endDate.replace(/\//g,"");
+  var result = "";
+  
+  var queryParameters = {orderBy:"$key",startAt:key+startDate,endAt:key+endDate,limitToLast:1};
+  var data = base.getData("", queryParameters);
+  for(var i in data) {
+     result = data[i].content;
+  }
+  return result;
+};
+
+/**
+ * https://stockmaster-471aa.firebaseio.com/Ebroker/
+ * @param  {string} firebase json
+ */
+ function _getEbrokerPoint(ebrokerData) {
+   var ebrokerPoint = 0;
+   //Long Term
+   if(Number(ebrokerData.macd50) > 0) ebrokerPoint = ebrokerPoint + (3.34/3);
+   if(Number(ebrokerData.ma100) > 0.02) ebrokerPoint = ebrokerPoint + (3.34/3);
+   if(Number(ebrokerData.cci60) > 0) ebrokerPoint = ebrokerPoint + (3.34/3);
+   //Medium Term
+   if(Number(ebrokerData.sar50) > 0) ebrokerPoint = ebrokerPoint + (3.33/4);
+   if(Number(ebrokerData.macd26) > 0) ebrokerPoint = ebrokerPoint + (3.33/4);
+   if(Number(ebrokerData.ma50) > 0.02) ebrokerPoint = ebrokerPoint + (3.33/4);
+   if(Number(ebrokerData.cci40) > 0) ebrokerPoint = ebrokerPoint + (3.33/4);
+   //Short Term
+   if(Number(ebrokerData.blg20) > 0) ebrokerPoint = ebrokerPoint + (3.33/5);
+   if(Number(ebrokerData.macd12) > 0) ebrokerPoint = ebrokerPoint + (3.33/5);
+   if(Number(ebrokerData.ma20) > 0.02) ebrokerPoint = ebrokerPoint + (3.33/5);
+   if(Number(ebrokerData.ghilo10) > 0) ebrokerPoint = ebrokerPoint + (3.33/5);
+   if(Number(ebrokerData.dmi7) > 0) ebrokerPoint = ebrokerPoint + (3.33/5);
+   
+   return ebrokerPoint.toFixed(2);
+};
+
+function _inBuyingArrays(value,array) {
+  
+  for (var i = 0; i < array.length; i++) {
+    if (array[i][0] == value) return i;
+  }
+  return -1;
+};
+
+function _isInArrays(value,array) {
+  for (var i = 0; i < array.length; i++) {
+    if (array[i] == value) return true;
+  }
+  return false;
+};
+
+function _formatDate(dateStr,format){
+  if (dateStr ==="") return "";
+  var date;
+  if(!_isValidDate(dateStr)) {
+    var dateArr = [{}];
+    dateArr = dateStr.split("/");
+    var day = dateArr[0];
+    var month = dateArr[1];
+    var year = dateArr[2];
+    date = new Date(year+"/"+month+"/"+day);
+    console.log('Formated: ' + date);
+  } else {
+    date = dateStr;
+  }
+  var formattedDate = Utilities.formatDate(date, "JST", format);
+  return formattedDate;
+};
+
+function _isValidDate(d) {
+  if (Object.prototype.toString.call(d) !== "[object Date]")
+    return false;
+  return !isNaN(d.getTime());
+};
+
+function _numberFormatter(num) {
+     if (num >= 1000000000) {
+        return (num / 1000000000).toFixed(1).replace(/\.0$/, '') + 'G';
+     }
+     if (num >= 1000000) {
+        return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+     }
+     if (num >= 1000) {
+        return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+     }
+     return num;
+}
+
+function _getCurrentYear() {
+  var today = new Date();
+  return today.getFullYear();
+};
+
+function _getFirebaseUrl(jsonPath) {
+  /*
+  We then make a URL builder
+  This takes in a path, and
+  returns a URL that updates the data in that path
+  */
+  return FIREBASE_URL + jsonPath;
+};
