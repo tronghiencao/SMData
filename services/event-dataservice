@@ -1,0 +1,92 @@
+/**
+ * 
+ */
+function EventDataService() {
+  /**
+   * 
+   */
+  function getEvents(key,startDate,endDate) {
+    if (DEBUG) {
+      console.info('EventDataService.getEvents');
+    }
+    const CACHE_OK_KEY = "Events_"+key+"_"+startDate.replace(/\//g,"")+"_"+endDate.replace(/\//g,"");
+    console.log('[GET-Events]: %s(%s, %s)', key, startDate, endDate);
+    var firebaseUrl = SMUtils().getFirebaseUrl("Events");
+    var secret = SMUtils().getSecret();
+    var data = null;
+    const cached_data = _getLastCacheResponseOK(CACHE_OK_KEY);
+    if (cached_data && Object.keys(cached_data).length) {
+      console.log("[EventDataService.getEvents] Return last cached OK response data..  =0");
+      data = cached_data;
+    } else {
+      var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, secret);
+      if (startDate == "") {
+        var today = new Date();
+        var lastMonthDate = new Date(today.setMonth(today.getMonth()-1));
+        startDate = SMUtils().formatDate(lastMonthDate,COMMON_DATE_FORMAT);
+      }
+      if (endDate == "") {
+        var today = new Date();
+        var nextMonthDate = new Date(today.setMonth(today.getMonth()+1));
+        endDate = SMUtils().formatDate(nextMonthDate,COMMON_DATE_FORMAT);
+      }
+      startDate = startDate.replace(/\//g,"");
+      endDate = endDate.replace(/\//g,"");
+      var result = "";
+      var queryParameters = {orderBy:"$key",startAt:key+startDate,endAt:key+endDate,limitToLast:1};
+      data = base.getData("", queryParameters);
+      if (data && Object.keys(data).length) {
+        // Keep last OK response
+        _setLastCacheResponseOK(CACHE_OK_KEY, data);
+      }
+    }
+    for(var i in data) {
+      var eventDate = SMUtils().formatDate(data[i].date,'MM/dd');
+      result = Utilities.formatString("%s(%s)",data[i].content,eventDate);
+    }
+    console.log("[GET-Events] Got event OK: "+result);
+    return result;
+  }
+
+  /**
+  * Import today events to firebase
+  * eventArray contents:
+  *     - key
+  *     - EXERCISE DATE YYYY/MM/DD
+  *     - EX-DIVIDEND DATE
+  *     - RECORD DATE
+  *     - RATE
+  *     - CONTENT
+  */
+  function setEvents(eventArray) {
+    var dataToImport = {};
+    // For convert date to YYYYMMDD
+    var reg = new RegExp('\/', 'gi');
+    
+    var row = 0;
+    for (; row < eventArray.length; row++) {
+      var key = eventArray[row][0];
+      var date = eventArray[row][1];
+      
+      if (eventArray[row][2] !== "") {
+        dataToImport[key+date.replace(reg, "")] = {
+          date:date,
+          exdividenddate:eventArray[row][2],
+          recorddate:eventArray[row][3],
+          rate:eventArray[row][4],
+          content:eventArray[row][5]
+        };
+      }
+    }
+    var firebaseUrl = SMUtils().getFirebaseUrl("");
+    var secret = SMUtils().getSecret();
+    var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, secret);
+    base.updateData("Events", dataToImport);
+  }
+
+  return {
+    getEvents,
+    setEvents
+  };
+  
+}

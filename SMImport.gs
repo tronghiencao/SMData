@@ -29,7 +29,9 @@ function importBrokingInfo(brokingArray) {
       change:brokingArray[row][7]
     };
   }
-  var base = FirebaseApp.getDatabaseByUrl(FIREBASE_URL, SECRET);
+  var firebaseUrl = SMUtils().getFirebaseUrl("");
+  var secret = SMUtils().getSecret();
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, secret);
   base.updateData("BrokingInfo", dataToImport);
 }
 
@@ -63,11 +65,15 @@ function importPrice(priceArray) {
         low:priceArray[row][4],
         close:priceArray[row][5],
         adjclose:priceArray[row][6],
-        volume:priceArray[row][7]
+        volume:priceArray[row][7],
+        foreignvolume:priceArray[row][8],
+        foreignroom:priceArray[row][9]
       };
     }
   }
-  var base = FirebaseApp.getDatabaseByUrl(FIREBASE_URL, SECRET);
+  var firebaseUrl = SMUtils().getFirebaseUrl("");
+  var secret = SMUtils().getSecret();
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, secret);
   base.updateData("Historicaldata", dataToImport);
 }
 
@@ -82,27 +88,7 @@ function importPrice(priceArray) {
  *     - CONTENT
  */
 function importEvents(eventArray) {
-  var dataToImport = {};
-  // For convert date to YYYYMMDD
-  var reg = new RegExp('\/', 'gi');
-  
-  var row = 0;
-  for (; row < eventArray.length; row++) {
-    var key = eventArray[row][0];
-    var date = eventArray[row][1];
-    
-    if (eventArray[row][2] !== "") {
-      dataToImport[key+date.replace(reg, "")] = {
-        date:date,
-        exdividenddate:eventArray[row][2],
-        recorddate:eventArray[row][3],
-        rate:eventArray[row][4],
-        content:eventArray[row][5]
-      };
-    }
-  }
-  var base = FirebaseApp.getDatabaseByUrl(FIREBASE_URL, SECRET);
-  base.updateData("Events", dataToImport);
+  EventDataService().setEvents(eventArray);
 }
 
 /* INCOME STATEMENT
@@ -143,7 +129,9 @@ function importIncomeArray(incomeArray) {
       };
     }
   }
-  var base = FirebaseApp.getDatabaseByUrl(FIREBASE_URL, SECRET);
+  var firebaseUrl = SMUtils().getFirebaseUrl("");
+  var secret = SMUtils().getSecret();
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, secret);
   base.updateData("IncomeData", dataToImport);
 }
 
@@ -187,7 +175,9 @@ function importBalanceSheetArray(balanceArray) {
       };
     }
   }
-  var base = FirebaseApp.getDatabaseByUrl(FIREBASE_URL, SECRET);
+  var firebaseUrl = SMUtils().getFirebaseUrl("");
+  var secret = SMUtils().getSecret();
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, secret);
   base.updateData("BalanceSheet", dataToImport);
 }
 
@@ -227,7 +217,9 @@ function importCashFlowArray(cashArray) {
       };
     }
   }
-  var base = FirebaseApp.getDatabaseByUrl(FIREBASE_URL, SECRET);
+  var firebaseUrl = SMUtils().getFirebaseUrl("");
+  var secret = SMUtils().getSecret();
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, secret);
   base.updateData("CashFlow", dataToImport);
 }
 
@@ -254,8 +246,6 @@ function importEbrokerArray(ebrokerArray) {
      var ebroker = ebrokerArray[row][2];
      var price = ebrokerArray[row][3];
      var todaychg = ebrokerArray[row][4];
-     var weekchg = ebrokerArray[row][23];
-     var monthchg = ebrokerArray[row][24];
      var weeks52low = ebrokerArray[row][5];
      var weeks52high = ebrokerArray[row][6];
      var vol100 = ebrokerArray[row][7];
@@ -274,8 +264,18 @@ function importEbrokerArray(ebrokerArray) {
      var ghilo10 = ebrokerArray[row][20];
      var dmi7 = ebrokerArray[row][21];
      var pvt = ebrokerArray[row][22];
-     var ebrokerPoint = _calcEbrokerPoint(ebrokerArray[row]);
-     if(ebrokerPoint > BUY_POINT && vol20 > BUY_VOLUM) {
+     var weekchg = ebrokerArray[row][23];
+     var monthchg = ebrokerArray[row][24];
+     //Foreign 5 days Trading Vol
+     var foreign5daysvol = ebrokerArray[row][25];
+     //Foreign Holding rate
+     var foreignhold = ebrokerArray[row][26];
+     //Chaikin Money Flow
+     var cmf = ebrokerArray[row][27];
+     //Beta
+     var beta = ebrokerArray[row][28];
+     var ebrokerPoint = SMUtils().calcEbrokerPoint(ebrokerArray[row]);
+     if(ebrokerPoint > BUY_POINT && vol20 > BUY_VOLUME) {
        ebroker = "Mua";
      } else if(ebrokerPoint <= SEL_POINT) {
        ebroker = "Bán";
@@ -308,68 +308,28 @@ function importEbrokerArray(ebrokerArray) {
          blg20:blg20,
          ghilo10:ghilo10,
          dmi7:dmi7,
-         pvt:pvt
+         pvt:pvt,
+         foreign5daysvol:foreign5daysvol,
+         foreignhold:foreignhold,
+         cmf:cmf,
+         beta:beta
       };
     }
   }
-  var base = FirebaseApp.getDatabaseByUrl(FIREBASE_URL, SECRET);
+  var firebaseUrl = SMUtils().getFirebaseUrl("");
+  var secret = SMUtils().getSecret();
+  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, secret);
   base.updateData("Ebroker", dataToImport);
 }
 
-//Delete key
-function removeHistoricaldata(key) {
-  var firebaseUrl = "https://stockmaster-471aa.firebaseio.com/Historicaldata/";
-  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
-  base.removeData(key,"");
-}
-
-//Delete IncomeData by key
-function removeIncomeData(key) {
-  var firebaseUrl = _getFirebaseUrl("IncomeData");
-  var year = _getCurrentYear();
-  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
-  var queryParameters = {orderBy:"$key",startAt:key,endAt:key+year+"1231"};
-  
-  var data = base.getData("", queryParameters);
-  for(var i in data) {
-    base.removeData(i,"");
-  }
-}
-
-//Delete BalanceSheet by key
-function removeBalanceSheet(key) {
-  var firebaseUrl = _getFirebaseUrl("BalanceSheet");
-  var year = _getCurrentYear();
-  var base = FirebaseApp.getDatabaseByUrl(firebaseUrl, SECRET);
-  var queryParameters = {orderBy:"$key",startAt:key,endAt:key+year+"1231"};
-  
-  var data = base.getData("", queryParameters);
-  for(var i in data) {
-    base.removeData(i,"");
-  }
-}
-
 /**
- * https://docs.google.com/spreadsheets/d/1ng5iHsdx4PfeoO05wep_dNpFMnGOl3EZJ9pJhZlF-mg
- * @param  {string} google spreedsheet
+ * Import today trading data to firebase
+ * indexArray contents:
+ *     - key
+ *     - date YYYY/MM/DD
+ *     - indexValue
+ *     - indexVND
  */
- function _calcEbrokerPoint(ebrokerData) {
-   var ebrokerPoint = 0;
-   //Long Term
-   if(ebrokerData[10] > 0) ebrokerPoint = ebrokerPoint + (3.34/3); //50-100 MACD
-   if(ebrokerData[13] > 0.02) ebrokerPoint = ebrokerPoint + (3.34/3); //MA100 vs Price
-   if(ebrokerData[16] > 0) ebrokerPoint = ebrokerPoint + (3.34/3); //60 Day CCI
-   //Medium Term
-   if(ebrokerData[18] > 0) ebrokerPoint = ebrokerPoint + (3.33/4); //50 Day Parabolic Time/Price
-   if(ebrokerData[11] > 0) ebrokerPoint = ebrokerPoint + (3.33/4); //26-100 MACD
-   if(ebrokerData[14] > 0.02) ebrokerPoint = ebrokerPoint + (3.33/4); //MA50 vs Price
-   if(ebrokerData[17] > 0) ebrokerPoint = ebrokerPoint + (3.33/4); //40 Day CCI
-   //Short Term
-   if(ebrokerData[19] > 0) ebrokerPoint = ebrokerPoint + (3.33/5); //20 Day BLG
-   if(ebrokerData[12] > 0) ebrokerPoint = ebrokerPoint + (3.33/5); //12-26 MACD
-   if(ebrokerData[15] > 0.02) ebrokerPoint = ebrokerPoint + (3.33/5); //MA20 vs Price
-   if(ebrokerData[20] > 0) ebrokerPoint = ebrokerPoint + (3.33/5); //10-8 Gann HiLo
-   if(ebrokerData[21] > 0) ebrokerPoint = ebrokerPoint + (3.33/5); //7 Day DMI
-   
-   return ebrokerPoint;
-};
+function importVNIndexdata(indexArray) {
+  HistoricalDataService().setVNIndexdata(indexArray);
+}
